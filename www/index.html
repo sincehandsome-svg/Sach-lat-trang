@@ -136,7 +136,7 @@ async function openBook(id){
     const p1=await pdf.getPage(1),vp=p1.getViewport({scale:1});
     $("ttl").textContent=cur.title;
     show("rd");history.pushState({r:1},"");
-    const box=$("book");box.innerHTML="";pages=[];done=new Set();
+    $("stage").innerHTML='<div id="book"></div>';const box=$("book");pages=[];done=new Set();
     for(let i=0;i<N;i++){const d=document.createElement("div");d.className="page";d.appendChild(document.createElement("img"));pages.push(d)}
     $("sl").max=N-1;
     flip=new St.PageFlip(box,{width:Math.round(vp.width),height:Math.round(vp.height),size:"stretch",
