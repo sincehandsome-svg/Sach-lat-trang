@@ -1,1 +1,5 @@
-
+{
+  "appId": "com.sachlattrang.app",
+  "appName": "Sách lật trang",
+  "webDir": "www"
+}
