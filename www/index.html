@@ -1,1 +1,205 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1320">
+<title>Sách lật trang</title>
+<style>
+:root{--bg:#0e1320;--s1:#171e30;--s2:#222b42;--tx:#e8ebf3;--mu:#8e98b0;--ac:#7fd6c2}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,Roboto,sans-serif}
+body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.view{display:none;height:100%;flex-direction:column}
+.view.on{display:flex}
+button{font:inherit;color:inherit;border:0;cursor:pointer}
+button:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+h1{font-family:Georgia,serif;font-weight:400;font-size:30px;margin:0;letter-spacing:-.01em}
+#lib header{padding:22px 20px 8px;display:flex;justify-content:space-between;align-items:baseline}
+#lib header small{color:var(--mu)}
+#shelf{flex:1;overflow:auto;padding:12px 20px 110px}
+.hero{display:flex;gap:16px;background:var(--s1);border-radius:24px;padding:14px;margin-bottom:22px;width:100%;text-align:left}
+.hero img,.cover{background:var(--s2);object-fit:cover;border-radius:12px}
+.hero img{width:104px;height:148px;flex:none}
+.hero .info{display:flex;flex-direction:column;justify-content:center;gap:8px;min-width:0;flex:1}
+.hero .t{font-family:Georgia,serif;font-size:21px;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+.bar{height:5px;border-radius:3px;background:var(--s2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ac)}
+.meta{color:var(--mu);font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:16px}
+.card{position:relative;text-align:left;background:none;padding:0}
+.cover{width:100%;aspect-ratio:2/3;display:block}
+.card .t{font-size:14px;margin:8px 0 6px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.x{position:absolute;top:6px;right:6px;width:30px;height:30px;border-radius:15px;background:rgba(14,19,32,.75);font-size:16px;line-height:1}
+.hero .x{top:10px;right:10px}
+.empty{color:var(--mu);text-align:center;margin-top:18vh;line-height:1.6;padding:0 24px}
+#add{position:fixed;right:max(20px,env(safe-area-inset-right));bottom:max(24px,env(safe-area-inset-bottom));background:var(--ac);color:#0b2a24;font-weight:700;padding:16px 22px;border-radius:20px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+#file{display:none}
+#rd .top{display:flex;align-items:center;gap:12px;padding:10px 14px}
+#back{background:var(--s2);width:42px;height:42px;border-radius:21px;font-size:20px;flex:none}
+#ttl{font-family:Georgia,serif;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#stage{flex:1;min-height:0;position:relative}
+#book{position:absolute;inset:0;margin:auto}
+.page{background:#fff;overflow:hidden}
+.page img{width:100%;height:100%;display:block}
+#rd .bot{display:flex;align-items:center;gap:14px;padding:10px 18px 14px}
+#sl{flex:1;accent-color:var(--ac)}
+#pos{color:var(--mu);font-size:14px;min-width:84px;text-align:right}
+#msg{position:fixed;left:0;right:0;top:40%;text-align:center;color:var(--mu);pointer-events:none}
+</style>
+</head>
+<body>
+<section id="lib" class="view on">
+  <header><h1>Thư viện</h1><small id="cnt"></small></header>
+  <div id="shelf"></div>
+  <button id="add">+ Thêm sách</button>
+  <input id="file" type="file" accept="application/pdf,.pdf">
+</section>
+<section id="rd" class="view">
+  <div class="top"><button id="back" aria-label="Về thư viện">←</button><div id="ttl"></div></div>
+  <div id="stage"><div id="book"></div></div>
+  <div class="bot"><input id="sl" type="range" min="0" value="0" aria-label="Chuyển trang"><span id="pos"></span></div>
+</section>
+<div id="msg"></div>
 
+<script src="lib/pdf.min.js"></script>
+<script src="lib/pdf.worker.min.js"></script>
+<script src="lib/page-flip.browser.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc="lib/pdf.worker.min.js";
+const $=id=>document.getElementById(id);
+const say=t=>$("msg").textContent=t||"";
+
+/* ---- lưu trữ: sách + trang đang đọc, giữ lại sau khi tắt app ---- */
+const DB=new Promise((ok,no)=>{const r=indexedDB.open("flipreader",1);
+  r.onupgradeneeded=()=>{r.result.createObjectStore("books",{keyPath:"id"});r.result.createObjectStore("files",{keyPath:"id"})};
+  r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});
+async function op(store,mode,fn){const db=await DB;return new Promise((ok,no)=>{
+  const t=db.transaction(store,mode);const q=fn(t.objectStore(store));
+  t.oncomplete=()=>ok(q&&q.result);t.onerror=()=>no(t.error)})}
+
+/* ---- thư viện ---- */
+function show(v){$("lib").classList.toggle("on",v==="lib");$("rd").classList.toggle("on",v==="rd")}
+async function renderLib(){
+  const list=(await op("books","readonly",s=>s.getAll())).sort((a,b)=>b.last-a.last);
+  $("cnt").textContent=list.length?list.length+" sách":"";
+  const sh=$("shelf");sh.innerHTML="";
+  if(!list.length){sh.innerHTML='<div class="empty">Chưa có sách nào.<br>Bấm “Thêm sách” và chọn file PDF trong máy.</div>';return}
+  const pct=b=>Math.round((b.page+1)/b.total*100);
+  const h=list[0],hero=document.createElement("div");
+  hero.className="hero";hero.tabIndex=0;hero.style.position="relative";
+  hero.innerHTML=`<img alt=""><div class="info"><div class="meta">Đọc tiếp</div><div class="t"></div><div class="bar"><i style="width:${pct(h)}%"></i></div><div class="meta">Trang ${h.page+1} / ${h.total}</div></div><button class="x" aria-label="Xóa sách">×</button>`;
+  hero.querySelector("img").src=h.cover;hero.querySelector(".t").textContent=h.title;
+  hero.onclick=()=>openBook(h.id);hero.querySelector(".x").onclick=e=>{e.stopPropagation();removeBook(h)};
+  sh.appendChild(hero);
+  if(list.length>1){const g=document.createElement("div");g.className="grid";
+    list.slice(1).forEach(b=>{const c=document.createElement("div");c.className="card";
+      c.innerHTML=`<img class="cover" alt=""><div class="t"></div><div class="bar"><i style="width:${pct(b)}%"></i></div><button class="x" aria-label="Xóa sách">×</button>`;
+      c.querySelector("img").src=b.cover;c.querySelector(".t").textContent=b.title;
+      c.onclick=()=>openBook(b.id);c.querySelector(".x").onclick=e=>{e.stopPropagation();removeBook(b)};
+      g.appendChild(c)});sh.appendChild(g)}
+}
+async function removeBook(b){
+  if(!confirm("Xóa “"+b.title+"” khỏi thư viện?"))return;
+  await op("books","readwrite",s=>s.delete(b.id));await op("files","readwrite",s=>s.delete(b.id));renderLib()}
+
+$("add").onclick=()=>$("file").click();
+$("file").onchange=async e=>{
+  const f=e.target.files[0];e.target.value="";if(!f)return;
+  try{
+    say("Đang thêm sách…");
+    const buf=await f.arrayBuffer();
+    const id=f.name+"_"+f.size;
+    const old=await op("books","readonly",s=>s.get(id));
+    if(!old){
+      const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf.slice(0))}).promise;
+      const p=await pdf.getPage(1),v0=p.getViewport({scale:1}),v=p.getViewport({scale:300/v0.width});
+      const c=document.createElement("canvas");c.width=v.width;c.height=v.height;
+      await p.render({canvasContext:c.getContext("2d"),viewport:v}).promise;
+      await op("files","readwrite",s=>s.put({id,data:buf}));
+      await op("books","readwrite",s=>s.put({id,title:f.name.replace(/\.pdf$/i,""),total:pdf.numPages,page:0,last:Date.now(),cover:c.toDataURL("image/jpeg",.8)}));
+      pdf.destroy();
+    }
+    say("");openBook(id);
+  }catch(err){say("Không đọc được file này: "+(err.message||err));setTimeout(say,4000)}
+};
+
+/* ---- trình đọc ---- */
+let cur=null,pdf=null,flip=null,pages=[],done=new Set(),token=0,N=0,saveT=0;
+async function openBook(id){
+  try{
+    say("Đang mở sách…");
+    cur=await op("books","readonly",s=>s.get(id));
+    const f=await op("files","readonly",s=>s.get(id));
+    pdf=await pdfjsLib.getDocument({data:new Uint8Array(f.data)}).promise;
+    N=pdf.numPages;
+    const p1=await pdf.getPage(1),vp=p1.getViewport({scale:1});
+    $("ttl").textContent=cur.title;
+    show("rd");history.pushState({r:1},"");
+    $("stage").innerHTML='<div id="book"></div>';const box=$("book");pages=[];done=new Set();
+    for(let i=0;i<N;i++){const d=document.createElement("div");d.className="page";d.appendChild(document.createElement("img"));pages.push(d)}
+    $("sl").max=N-1;
+    flip=new St.PageFlip(box,{width:Math.round(vp.width),height:Math.round(vp.height),size:"stretch",
+      minWidth:200,maxWidth:1400,minHeight:280,maxHeight:2000,showCover:true,usePortrait:true,
+      startPage:cur.page||0,mobileScrollSupport:false,maxShadowOpacity:.3,flippingTime:600});
+    flip.loadFromHTML(pages);
+    busy=false;
+    const c0=cur.page||0;
+    await Promise.all([c0-1,c0,c0+1,c0+2].filter(k=>k>=0&&k<N).map(async k=>{await draw(k);done.add(k)}));
+    flip.on("changeState",e=>{busy=e.data!=="read";if(!busy)quiet=Date.now()+700;if(busy&&task){try{task.cancel()}catch(_){}}});
+    flip.on("flip",e=>go(e.data));
+    go(cur.page||0);say("");
+  }catch(err){say("Không mở được sách: "+(err.message||err));setTimeout(say,4000);show("lib")}
+}
+function go(i){
+  cur.page=i;cur.last=Date.now();
+  $("pos").textContent=(i+1)+" / "+N;$("sl").value=i;
+  quiet=Date.now()+700;clearTimeout(saveT);saveT=setTimeout(save,900);ensure(i);
+}
+function save(){if(cur)op("books","readwrite",s=>s.put(cur))}
+let busy=false,task=null,quiet=0;
+const idle=()=>new Promise(r=>setTimeout(r,30));
+async function ensure(c){
+  const t=++token,want=[];
+  for(let k=c-2;k<=c+5;k++)if(k>=0&&k<N)want.push(k);
+  want.sort((a,b)=>Math.abs(a-c)-Math.abs(b-c));
+  pages.forEach((p,k)=>{if(Math.abs(k-c)>12&&done.has(k)){const im=p.firstChild;if(im.src.startsWith("blob:"))URL.revokeObjectURL(im.src);im.removeAttribute("src");done.delete(k)}});
+  for(const k of want){
+    if(t!==token||!pdf)return;
+    while(!done.has(k)){
+      while(busy||Date.now()<quiet){await idle();if(t!==token||!pdf)return}
+      if(t!==token||!pdf)return;
+      if(await draw(k))done.add(k);else await idle();
+    }
+    await idle();
+  }
+}
+async function draw(k){
+  const p=await pdf.getPage(k+1),v0=p.getViewport({scale:1}),v=p.getViewport({scale:Math.min(1.6,900/v0.width)});
+  const c=document.createElement("canvas");c.width=v.width;c.height=v.height;
+  task=p.render({canvasContext:c.getContext("2d"),viewport:v});
+  try{await task.promise}
+  catch(e){if(e&&e.name==="RenderingCancelledException")return false;throw e}
+  finally{task=null}
+  const blob=await new Promise(r=>c.toBlob(r,"image/jpeg",.82));
+  if(!pdf||!pages[k])return true;
+  const im=pages[k].firstChild;im.decoding="async";im.src=URL.createObjectURL(blob);
+  try{await im.decode()}catch(e){}
+  return true;
+}
+$("sl").oninput=e=>{const n=+e.target.value;if(flip){flip.turnToPage(n);go(n)}};
+function closeBook(){
+  clearTimeout(saveT);save();token++;
+  if(flip){flip.destroy();flip=null}
+  if(pdf){pdf.destroy();pdf=null}
+  pages.forEach(p=>{const u=p.firstChild.src;if(u&&u.startsWith("blob:"))URL.revokeObjectURL(u)});
+  pages=[];cur=null;show("lib");renderLib();
+}
+$("back").onclick=()=>history.back();
+addEventListener("popstate",()=>{if($("rd").classList.contains("on"))closeBook()});
+document.addEventListener("visibilitychange",()=>{if(document.hidden){clearTimeout(saveT);save()}});
+addEventListener("pagehide",()=>{clearTimeout(saveT);save()});
+renderLib();
+</script>
+</body>
+</html>
