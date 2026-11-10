@@ -37,12 +37,13 @@ h1{font-family:Georgia,serif;font-weight:400;font-size:30px;margin:0;letter-spac
 #file{display:none}
 #rd{position:relative;overflow:hidden}
 #rd .top,#rd .bot{position:absolute;left:0;right:0;z-index:10;display:flex;align-items:center;background:rgba(14,19,32,.94);transition:transform .25s ease,opacity .25s ease;opacity:0;pointer-events:none}
-#rd .top{top:0;gap:12px;padding:max(10px,env(safe-area-inset-top)) 14px 10px;transform:translateY(-100%)}
+#rd .top{top:0;gap:12px;min-height:68px;padding:max(14px,env(safe-area-inset-top)) 14px 14px 76px;transform:translateY(-100%)}
 #rd.ui .top,#rd.ui .bot{transform:none;opacity:1;pointer-events:auto}
 #hz{position:absolute;top:0;left:30%;right:30%;height:40px;z-index:20;background:none;border:0;padding:0}
 #hz::after{content:"";position:absolute;left:50%;top:10px;width:44px;height:4px;margin-left:-22px;border-radius:2px;background:rgba(255,255,255,.4);transition:opacity .6s}
 #hz.q::after{opacity:0}
-#back{background:var(--s2);width:42px;height:42px;border-radius:21px;font-size:20px;flex:none}
+#back{position:absolute;z-index:30;top:max(12px,env(safe-area-inset-top));left:max(14px,env(safe-area-inset-left));background:rgba(34,43,66,.8);width:44px;height:44px;border-radius:22px;font-size:20px;opacity:.55;transition:opacity .25s}
+#rd.ui #back{opacity:1}
 #ttl{font-family:Georgia,serif;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #stage{position:absolute;inset:0}
 #book{position:absolute;inset:0;margin:auto}
@@ -63,7 +64,8 @@ h1{font-family:Georgia,serif;font-weight:400;font-size:30px;margin:0;letter-spac
 </section>
 <section id="rd" class="view">
   <button id="hz" aria-label="Hiện hoặc ẩn thanh điều khiển"></button>
-  <div class="top"><button id="back" aria-label="Về thư viện">←</button><div id="ttl"></div></div>
+  <button id="back" aria-label="Về thư viện">←</button>
+  <div class="top"><div id="ttl"></div></div>
   <div id="stage"><div id="book"></div></div>
   <div class="bot"><input id="sl" type="range" min="0" value="0" aria-label="Chuyển trang"><span id="pos"></span></div>
 </section>
